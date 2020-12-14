@@ -21,11 +21,13 @@ def plot_signal():
     return sig
 
 
-def filter_frequency(audio_file, frequency):
-    my_fft = fft(audio_file)
-    my_fft[frequency] = -25
+def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
+    transformed_audio = fft(audio_file)
 
-    return ifft(my_fft)
+    for frequency_to_transform, frequency_value in zip(frequencies_to_transform, frequency_values):
+        transformed_audio[frequencies_to_transform] = frequency_value
+
+    return ifft(transformed_audio)
 
 
 def main():
@@ -41,8 +43,9 @@ def main():
     plt.show()
 
     # Perform fft, then change frequency and return the original file after inverse fft
-    frequencies_to_filter = range(100)
-    filtered_audio = filter_frequency(audio_signal, frequencies_to_filter)
+    frequencies = range(100)
+    values = [-55] * len(frequencies)
+    filtered_audio = filter_frequency(audio_signal, frequencies, values)
     plt.plot(filtered_audio)
     plt.show()
 
