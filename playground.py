@@ -32,48 +32,54 @@ def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
 
 
 def main():
-    # Open audio file
-    audio_file = wave.open('audio_files/London_Trafalgar_Square.wav', 'r')
+    # # Open audio file
+    # audio_file = wave.open('audio_files/London_Trafalgar_Square.wav', 'r')
+    #
+    # # Convert the audio file into signal
+    # audio_signal = audio_file.readframes(-1)
+    # audio_signal = np.fromstring(audio_signal, "Int16")
 
-    # Convert the audio file into signal
-    audio_signal = audio_file.readframes(-1)
-    audio_signal = np.fromstring(audio_signal, "Int16")
+    filenames = ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Ellie recordings
-    ellie_recordings = \
-        [wave.open('audio_files/ellie-with-noise.wav', 'r'),  # Ellie with noise
-         wave.open('audio_files/background-noise.wav', 'r'),  # Background noises
-         wave.open('audio_files/ellie.wav', 'r')]  # Ellie without noise
+    ellie_recordings = [wave.open(filename, 'r') for filename in filenames]
 
     # Iterate over recordings
-    for recording in ellie_recordings:
-        signal = np.fromstring(recording.readframes(-1), "Int16")
+    for recording, filename in zip(ellie_recordings, filenames):
+
+        # Get the signal from file
+        filename = filename.rsplit(".", 1)[0]
+        signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
+
+        # Plot the audio file
         plt.plot(signal)
+        title = filename + ' before changing frequencies'
+        plt.title(title)
         plt.xlabel('Time')
         plt.ylabel('Amplitude')
-        # plt.show()
+        plt.savefig('plots/before/' + filename.split('/')[1])
         plt.clf()
 
         # Output of Fourier transform
-        fft_signal = fftpack.fft(signal)
-        fft_signal[10:200] = 0
-        audio_after_frequency_transform = fftpack.ifft(fft_signal)
+        fft_signal = fftpack.rfft(signal)
+        fft_signal[10:2000] = 0
+        audio_after_frequency_transform = fftpack.irfft(fft_signal)
 
+        # Sample rate of original file
         samplerate = 48000
 
+        # Plot the audio file after transformation
         plt.plot(audio_after_frequency_transform)
-        # plt.xlabel('Time')
-        # plt.ylabel('Amplitude')
-
-        n = len(audio_after_frequency_transform)
-        real_audio_after_fft = 2.0 / n * \
-                                np.abs(audio_after_frequency_transform[:n // 2])
-
-        write('audio_files/ellie-with-noise-after-fft.wav', samplerate, real_audio_after_fft)
-
-        plt.show()
+        title = filename + ' after changing frequencies'
+        plt.title(title)
+        plt.xlabel('Time')
+        plt.ylabel('Amplitude')
+        plt.savefig('plots/after/' + filename.split('/')[1])
         plt.clf()
 
+        # Save the audio file after transformation
+        saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
+        write(saved_name, samplerate, audio_after_frequency_transform)
 
     # Plot the signal
     # plt.plot(audio_signal)
