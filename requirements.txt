@@ -1,0 +1,6 @@
+# packages used for pip install
+scipy
+numpy
+matplotlib
+wave
+librosa

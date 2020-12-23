@@ -1,3 +1,5 @@
+"""Cancel noise from a couple of recordings by Ellie"""
+
 from scipy import fft, ifft, fftpack
 from scipy.signal import stft
 import numpy as np
@@ -5,6 +7,7 @@ from matplotlib import pyplot as plt
 import wave
 import librosa
 from scipy.io.wavfile import write
+from os import makedirs
 
 
 def plot_signal():
@@ -36,14 +39,22 @@ def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
 def main():
     filenames = ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
+    # Store plotted audio waves in plots dir
+    try:
+        makedirs('plots')
+    except OSError as err:
+        pass
+
     # Ellie recordings
     ellie_recordings = [wave.open(filename, 'r') for filename in filenames]
 
     # Iterate over recordings
     for recording, filename in zip(ellie_recordings, filenames):
 
-        # Get the signal from file
+        # Find duration of audio file
         duration = librosa.get_duration(filename=filename)
+
+        # Get the signal from file
         filename = filename.rsplit(".", 1)[0]
         signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
 
@@ -53,6 +64,12 @@ def main():
         plt.title(title)
         plt.xlabel('Time')
         plt.ylabel('Amplitude')
+
+        try:
+            makedirs('plots/before')
+        except OSError as err:
+            pass
+
         plt.savefig('plots/before/' + filename.split('/')[1])
         plt.clf()
 
@@ -72,9 +89,11 @@ def main():
         threshold = 300
         fft_signal[(freqs > threshold)] = 0
 
+        # Plot the fft output
         plt.plot(fft_signal)
         plt.show()
 
+        # Revert back to original
         audio_after_frequency_transform = fftpack.irfft(fft_signal)
 
         # Plot the audio file after transformation
@@ -83,10 +102,22 @@ def main():
         plt.title(title)
         plt.xlabel('Time')
         plt.ylabel('Amplitude')
+
+        # Create dir to save plots after transform
+        try:
+            makedirs('plots/after')
+        except OSError as err:
+            pass
+
         plt.savefig('plots/after/' + filename.split('/')[1])
         plt.clf()
 
         # Save the audio file after transformation
+        try:
+            makedirs('audio_files/after')
+        except OSError as err:
+            pass
+
         saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
         write(saved_name, samplerate, audio_after_frequency_transform)
 

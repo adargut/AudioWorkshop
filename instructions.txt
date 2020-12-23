@@ -1,0 +1,6 @@
+How to run this:
+1. get Python
+2. get pip (Python package installer)
+3. open terminal in AudioWorkshop folder
+4. in terminal write: "pip install -r requirements.txt" this will install all the package we're using
+5. run playground.py and enjoy life
