@@ -1,7 +1,9 @@
 from scipy import fft, ifft, fftpack
+from scipy.signal import stft
 import numpy as np
 from matplotlib import pyplot as plt
 import wave
+import librosa
 from scipy.io.wavfile import write
 
 
@@ -32,13 +34,6 @@ def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
 
 
 def main():
-    # # Open audio file
-    # audio_file = wave.open('audio_files/London_Trafalgar_Square.wav', 'r')
-    #
-    # # Convert the audio file into signal
-    # audio_signal = audio_file.readframes(-1)
-    # audio_signal = np.fromstring(audio_signal, "Int16")
-
     filenames = ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Ellie recordings
@@ -48,6 +43,7 @@ def main():
     for recording, filename in zip(ellie_recordings, filenames):
 
         # Get the signal from file
+        duration = librosa.get_duration(filename=filename)
         filename = filename.rsplit(".", 1)[0]
         signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
 
@@ -60,13 +56,26 @@ def main():
         plt.savefig('plots/before/' + filename.split('/')[1])
         plt.clf()
 
-        # Output of Fourier transform
-        fft_signal = fftpack.rfft(signal)
-        fft_signal[10:2000] = 0
-        audio_after_frequency_transform = fftpack.irfft(fft_signal)
-
         # Sample rate of original file
         samplerate = 48000
+
+        # Number of samples
+        n = int(samplerate * duration)
+
+        # Output of Fourier transform
+        fft_signal = fftpack.rfft(signal)
+
+        # x axis
+        freqs = fftpack.rfftfreq(n, 1 / samplerate)
+
+        # Filter all frequencies above threshold
+        threshold = 300
+        fft_signal[(freqs > threshold)] = 0
+
+        plt.plot(fft_signal)
+        plt.show()
+
+        audio_after_frequency_transform = fftpack.irfft(fft_signal)
 
         # Plot the audio file after transformation
         plt.plot(audio_after_frequency_transform)
@@ -80,17 +89,6 @@ def main():
         # Save the audio file after transformation
         saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
         write(saved_name, samplerate, audio_after_frequency_transform)
-
-    # Plot the signal
-    # plt.plot(audio_signal)
-    # plt.show()
-    #
-    # # Perform fft, then change frequency and return the original file after inverse fft
-    # frequencies = range(100)
-    # values = [-55] * len(frequencies)
-    # filtered_audio = filter_frequency(audio_signal, frequencies, values)
-    # plt.plot(filtered_audio)
-    # plt.show()
 
 
 if __name__ == '__main__':
