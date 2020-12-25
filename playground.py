@@ -10,34 +10,28 @@ from scipy.io.wavfile import write
 from os import makedirs
 
 
-def plot_signal():
-    np.random.seed(1234)
+def update_average_freqs(last_100_freqs, magnitude, freq):
+    last_100_freqs[freq].append(magnitude)
+    if len(last_100_freqs[freq]) > 100:
+        last_100_freqs[freq].pop(0)
 
-    time_step = 0.02
-    period = 5.
 
-    time_vec = np.arange(0, 20, time_step)
-    sig = (np.sin(2 * np.pi / period * time_vec)
-           + 0.5 * np.random.randn(time_vec.size))
-
-    plt.figure(figsize=(6, 5))
-    plt.plot(time_vec, sig, label='Original signal')
+def plot_average_freqs(last_100_freqs):
+    width = 5
+    plt.title('Histogram of frequencies in last 100 0.01 seconds')
+    plt.xlabel('Freq [Hz]')
+    plt.ylabel('Magnitude')
+    averages = {}
+    for key in last_100_freqs.keys():
+        if len(last_100_freqs[key]) > 0:
+            averages[key] = np.average(last_100_freqs[key])
+    plt.bar(averages.keys(), averages.values(), width, color='b')
+    print('yo')
     plt.show()
-
-    return sig
-
-
-def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
-    transformed_audio = fft(audio_file)
-
-    for frequency_to_transform, frequency_value in zip(frequencies_to_transform, frequency_values):
-        transformed_audio[frequencies_to_transform] = frequency_value
-
-    return ifft(transformed_audio)
 
 
 def main():
-    filenames = ['audio_files/ellie-with-noise.wav' , 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+    filenames = ['audio_files/ellie-with-noise.wav']  # , 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Store plotted audio waves in plots dir
     try:
@@ -79,35 +73,51 @@ def main():
         # Number of samples
         n = int(samplerate * duration)
 
+        # Parameters for windowed fft
         window_size = 1 / 5
         increment_size = 1 / 100
         running_avg = 0
+        window = int(samplerate * window_size)
+        freqs = fftpack.rfftfreq(window, 1 / samplerate)
 
         # Perform fft on small window
-        st = []
+        last_100_freqs = {freq: [] for freq in freqs}
         i = 0
+        j = 0  # todo remove this, debug parameter
         while i < n - 1 / 5:
-            window = int(samplerate * window_size)
+            # Take a small window on audio file
             windowed_signal = signal[i:i + int(samplerate * window_size)]
+
+            title = 'Signal with window of size ' + str(window_size) + ' second'
+            plt.title(title)
+            plt.plot(windowed_signal)
+            # plt.show()
+            plt.clf()
+
+            # Use fft
             fft_windowed_signal = np.abs(fftpack.rfft(windowed_signal))
 
-            # x axis
-            freqs = fftpack.rfftfreq(window, 1 / samplerate)
+            # Average out the last 100 1/100 seconds
+            k = 0
+            while freqs[k] < len(fft_windowed_signal):
+                freq = freqs[k]
+                magnitude = fft_windowed_signal[int(freq)]
+                update_average_freqs(last_100_freqs=last_100_freqs, magnitude=magnitude, freq=freq)
+                k += 1
 
             plt.plot(freqs, fft_windowed_signal)
             title = 'Frequency Histogram from ' + str(i) + ' to ' + str(i + int(samplerate * window_size))
             plt.title(title)
-
-            # plt.plot(windowed_signal)
-            # plt.title('Windowed Signal')
-            plt.show()
+            # plt.show()
             plt.clf()
             i += int(increment_size * samplerate)
 
             j += 1
+            if j > 100:
+                plot_average_freqs(last_100_freqs)
+                break
 
-            if j > 1000: break
-
+        exit()  # todo remove this, for debug
         # Output of Fourier transform
         fft_signal = fftpack.rfft(signal)
 
