@@ -37,7 +37,7 @@ def filter_frequency(audio_file, frequencies_to_transform, frequency_values):
 
 
 def main():
-    filenames = ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+    filenames = ['audio_files/ellie-with-noise.wav' , 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Store plotted audio waves in plots dir
     try:
@@ -78,6 +78,35 @@ def main():
 
         # Number of samples
         n = int(samplerate * duration)
+
+        window_size = 1 / 5
+        increment_size = 1 / 100
+        running_avg = 0
+
+        # Perform fft on small window
+        st = []
+        i = 0
+        while i < n - 1 / 5:
+            window = int(samplerate * window_size)
+            windowed_signal = signal[i:i + int(samplerate * window_size)]
+            fft_windowed_signal = np.abs(fftpack.rfft(windowed_signal))
+
+            # x axis
+            freqs = fftpack.rfftfreq(window, 1 / samplerate)
+
+            plt.plot(freqs, fft_windowed_signal)
+            title = 'Frequency Histogram from ' + str(i) + ' to ' + str(i + int(samplerate * window_size))
+            plt.title(title)
+
+            # plt.plot(windowed_signal)
+            # plt.title('Windowed Signal')
+            plt.show()
+            plt.clf()
+            i += int(increment_size * samplerate)
+
+            j += 1
+
+            if j > 1000: break
 
         # Output of Fourier transform
         fft_signal = fftpack.rfft(signal)

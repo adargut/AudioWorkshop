@@ -22,7 +22,7 @@ plt.plot(x, y)
 plt.show()
 
 _, nice_tone = generate_sine_wave(400, SAMPLE_RATE, DURATION)
-_, noise_tone = generate_sine_wave(4000, SAMPLE_RATE, DURATION)
+_, noise_tone = generate_sine_wave(3727, SAMPLE_RATE, DURATION)
 noise_tone = noise_tone * 0.3
 
 mixed_tone = nice_tone + noise_tone
@@ -46,8 +46,8 @@ threshold = 1000
 yf[(xf > threshold)] = 0
 
 plt.plot(xf, np.abs(yf))
-# plt.show()
+plt.show()
 
 filtered_yf = irfft(yf)
 plt.plot(filtered_yf[:1000])
-# plt.show()
+plt.show()

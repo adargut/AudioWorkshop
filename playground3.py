@@ -5,19 +5,20 @@ from matplotlib import pyplot as plt
 from scipy.fft import rfft, irfft, rfftfreq
 
 SAMPLE_RATE = 44100  # Hertz
-DURATION = 5  # Seconds
+DURATION = 1  # Seconds
 
 
-def generate_split_sine_wave(freq, sample_rate, duration):
+def generate_split_sine_wave(freq, sample_rate, duration, beta):
     x = np.linspace(0, duration, sample_rate * duration, endpoint=False)
     frequencies = x * freq
     # 2pi because np.sin takes radians, y_i = f(x_i) where f(x)=sin(2pi*x)
     y = np.sin((2 * np.pi) * frequencies)
     y[500:] *= 5
+    y[0:500] = np.sin((2 * np.pi) * frequencies[:500])
     return x, y
 
 _, nice_tone = generate_split_sine_wave(400, SAMPLE_RATE, DURATION)
-_, noise_tone = generate_split_sine_wave(4000, SAMPLE_RATE, DURATION)
+_, noise_tone = generate_split_sine_wave(30000, SAMPLE_RATE, DURATION)
 noise_tone = noise_tone * 0.3
 
 mixed_tone = nice_tone + noise_tone
