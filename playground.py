@@ -95,7 +95,6 @@ def main():
         # Parameters for windowed fft
         window_size = 1 / 5
         increment_size = 1 / 100
-        running_avg = 0
         window = int(samplerate * window_size)
         freqs = fftpack.rfftfreq(window, 1 / samplerate)
 
