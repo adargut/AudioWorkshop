@@ -8,7 +8,7 @@ SAMPLE_RATE = 44100  # Hertz
 DURATION = 1  # Seconds
 
 
-def generate_split_sine_wave(freq, sample_rate, duration, beta):
+def generate_split_sine_wave(freq, sample_rate, duration):
     x = np.linspace(0, duration, sample_rate * duration, endpoint=False)
     frequencies = x * freq
     # 2pi because np.sin takes radians, y_i = f(x_i) where f(x)=sin(2pi*x)

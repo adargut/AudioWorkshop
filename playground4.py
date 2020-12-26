@@ -1,12 +1,10 @@
 """Filter out noise from recordings of Ellie"""
 
 from scipy import fftpack
-from scipy.signal import stft
 from tqdm import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 import wave
-import librosa
 from scipy.io.wavfile import write
 from os import makedirs
 
@@ -49,8 +47,14 @@ def main():
     # Iterate over recordings
     for recording, filename in zip(ellie_recordings, filenames):
 
-        # Find duration of audio file
-        duration = librosa.get_duration(filename=filename)
+        # Open file
+        file = wave.open(filename, 'r')
+
+        # Find number of samples of audio file
+        total_samples = wave.Wave_read.getnframes(file)
+
+        # Find samplerate of audio file
+        sample_rate = wave.Wave_read.getframerate(file)
 
         # Get the signal from file
         filename = filename.rsplit(".", 1)[0]
@@ -71,20 +75,15 @@ def main():
         plt.savefig('plots/before/' + filename.split('/')[1])
         plt.clf()
 
-        # Sample rate of original file
-        samplerate = 48000
-
-        # Number of samples
-        n = int(samplerate * duration)
-
         # Parameters for windowed fft
-        window_size = 1 / 500
-        window = int(samplerate * window_size)
-        step = int(window_size * samplerate)
+        window_size = 1 / 5
+        window = int(sample_rate * window_size)
+        step_size = 1 / 100
+        step = int(sample_rate * step_size)
 
         # Perform fft on small window
         all_windows_post_fft = []
-        for i in tqdm(range(0, int(n - 1/5), step)):
+        for i in tqdm(range(0, int(total_samples - window), step)):
             # Take a small window on audio file
             windowed_signal = signal[i:i + window]
 
@@ -95,7 +94,7 @@ def main():
         merged_audio_file = merge_windows(all_windows_post_fft)
         saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
         print('saving:', saved_name)
-        write(saved_name, samplerate, merged_audio_file)
+        write(saved_name, sample_rate, merged_audio_file)
 
 
 if __name__ == '__main__':
