@@ -7,23 +7,19 @@ from scipy.io.wavfile import write
 from os import makedirs
 
 
-def update_last_freqs(last_freqs, freq, magnitude, averaged_number_of_freqs):
-    last_freqs[freq].append(magnitude)
-    if len(last_freqs[freq]) > averaged_number_of_freqs:
-        last_freqs[freq].pop(0)
+def update_last_freqs(last_freqs, freq_id, magnitude, averaged_number_of_freqs):
+    last_freqs[freq_id].append(magnitude)
+    if len(last_freqs[freq_id]) > averaged_number_of_freqs:
+        last_freqs[freq_id].pop(0)
 
 
-def plot_average_freqs(last_freqs, title):
-    width = 5
+def plot_frequencies(title, freqs, amplitudes, path=None):
     plt.title(title)
     plt.xlabel('Freq [Hz]')
     plt.ylabel('Magnitude')
-    averages = {}
-    for key in last_freqs.keys():
-      #  if len(last_freqs[key]) > 0:
-            averages[key] = np.average(last_freqs[key])
-    plt.bar(averages.keys(), averages.values(), width, color='b')
-    plt.show()
+    plt.plot(freqs, amplitudes)
+    if path:
+        plt.savefig(path)
     plt.clf()
 
 
@@ -33,12 +29,13 @@ def eliminate_frequencies(amplitudes, freqs, threshold):
     return signal_post_fft
 
 
-def plot_audio_signal(title, signal):
+def plot_audio_signal(title, signal, path=None):
     plt.title(title)
     plt.plot(signal)
     plt.xlabel('Time')
     plt.ylabel('Amplitude')
-    plt.show()
+    if path:
+        plt.savefig(path)
     plt.clf()
 
 
@@ -47,7 +44,8 @@ def merge_windows(windows):
 
 
 def main():
-    filenames = ['audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+    filenames = [
+        'audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Store plotted audio waves in plots dir
     try:
@@ -92,46 +90,59 @@ def main():
         # Parameters for windowed fft
         secs_in_window = 1 / 5
         secs_in_increment = 1 / 100
-        samples_in_window = int(sample_rate * secs_in_window)
-        samples_in_increment = int(sample_rate * secs_in_increment)
-        averaged_number_of_freqs = 10
+        window = int(sample_rate * secs_in_window)
+        increment = int(sample_rate * secs_in_increment)
+        averaged_number_of_freqs = 20
+        bool_plot_audio_signal_pre_fft = True
+        bool_plot_frequencies = True
+        bool_plot_average_freqs = True
 
-        freqs = np.fft.rfftfreq(samples_in_window, 1 / sample_rate)
+        freqs = np.fft.rfftfreq(window, 1 / sample_rate)
 
         # Perform fft on small window
-        last_freqs = {freq: [] for freq in freqs}
+        last_freqs = [[] for _ in range(len(freqs))]
         i = 0
-        all_windows_post_fft = []
+        iteration_count = 0
+        post_fft_frequencies = []
 
-        while i < sample_rate/2: #total_samples - secs_in_window:
+        while i < total_samples - window:
             # Take a small window on audio file
-            windowed_signal = signal[i:i + samples_in_window]
+            windowed_signal = signal[i:i + window]
 
             # Plot before fft
-            title = 'Pre-FFT signal in time ' + str(i/sample_rate) + ' - ' + str((i+samples_in_window)/sample_rate)
-            plot_audio_signal(title=title, signal=windowed_signal)
+            if bool_plot_audio_signal_pre_fft:
+                title = 'Pre-FFT signal in time ' + str(i / sample_rate) + ' - ' + str((i + window) / sample_rate)
+                plot_audio_signal(title, windowed_signal,
+                                  'plots/audio_signal_pre_fft/' + str(iteration_count))
 
             # Use fft
             fft_windowed_signal = np.abs(np.fft.rfft(windowed_signal))
 
-            # Average out the last 100 1/100 seconds
-            for k in range(len(freqs)):
-                freq = freqs[k]
-                magnitude = fft_windowed_signal[k]
-                update_last_freqs(last_freqs=last_freqs, freq=freq, magnitude=magnitude,
+            # Update averages
+            for freq_id in range(len(freqs)):
+                magnitude = fft_windowed_signal[freq_id]
+                update_last_freqs(last_freqs=last_freqs, freq_id=freq_id, magnitude=magnitude,
                                   averaged_number_of_freqs=averaged_number_of_freqs)
+            if bool_plot_frequencies:
+                title = 'Frequency Histogram in time ' + str(i / sample_rate) + ' - ' + str((i + window) / sample_rate)
+                plot_frequencies(title, freqs, fft_windowed_signal,
+                                 'plots/frequencies/' + str(iteration_count))
 
-            # plt.plot(freqs, fft_windowed_signal)
-            # title = 'Frequency Histogram from ' + str(i) + ' to ' + str(i + int(samplerate * window_size))
-            # plt.title(title)
-            # plt.show()
-            # plt.clf()
-            i += int(secs_in_increment * sample_rate)
+            if True: #iteration_count % averaged_number_of_freqs == 0:
+                averages = []
+                for j in range(len(freqs)):
+                    averages.append(np.average(last_freqs[j]))
+                post_fft_frequencies.append(averages)
+                if bool_plot_average_freqs:
+                    title = 'Average Frequency Histogram in time ' + str(i / sample_rate) + ' - ' + str(
+                        (i + window) / sample_rate)
+                    plot_frequencies(title, freqs, averages,
+                                     'plots/average_frequencies/' + str(iteration_count))
 
-            title = 'Average frequencies in time ' + str(i/sample_rate) + ' - ' + str((i+samples_in_window)/sample_rate)
-            plot_average_freqs(last_freqs=last_freqs, title=title)
+            i += increment
+            iteration_count += 1
 
-        # exit()  # todo remove this, for debug
+        exit()  # todo remove this, for debug
         # Output of Fourier transform
         fft_signal = np.ftt.rfft(signal)
 

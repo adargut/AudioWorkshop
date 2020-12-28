@@ -1,6 +1,5 @@
 """Filter out noise from recordings of Ellie"""
 
-from scipy import fftpack
 from tqdm import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
@@ -12,10 +11,10 @@ from os import makedirs
 def eliminate_frequencies(signal, threshold=3500):
     n = len(signal)
     samplerate = 48000
-    freqs = fftpack.rfftfreq(n, 1 / samplerate)
-    signal_after_fft = (fftpack.rfft(signal))
+    freqs = np.fft.rfftfreq(n, 1 / samplerate)
+    signal_after_fft = (np.fft.rfft(signal))
     signal_after_fft[(freqs > threshold)] = 0
-    signal_post_fft = fftpack.irfft(signal_after_fft)
+    signal_post_fft = np.fft.irfft(signal_after_fft)
     return signal_post_fft
 
 
@@ -27,10 +26,8 @@ def plot_audio_signal(title, signal):
     plt.show()
     plt.clf()
 
-
 def merge_windows(windows):
     return np.concatenate(windows)
-
 
 def main():
     filenames = ['audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
@@ -83,13 +80,13 @@ def main():
 
         # Perform fft on small window
         all_windows_post_fft = []
-        for i in tqdm(range(0, int(total_samples - window), step)):
+        for i in tqdm(range(0, int(total_samples - window), window)):
             # Take a small window on audio file
             windowed_signal = signal[i:i + window]
 
             # Eliminate high frequencies from window
-            filtred_windowed_signal = eliminate_frequencies(signal=windowed_signal)
-            all_windows_post_fft.append(filtred_windowed_signal)
+            filtered_windowed_signal = eliminate_frequencies(signal=windowed_signal, threshold=3500)
+            all_windows_post_fft.append(filtered_windowed_signal)
 
         merged_audio_file = merge_windows(all_windows_post_fft)
         saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
