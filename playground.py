@@ -34,6 +34,7 @@ def plot_audio_signal(title, signal, path=None):
     plt.plot(signal)
     plt.xlabel('Time')
     plt.ylabel('Amplitude')
+    plt.show()
     if path:
         plt.savefig(path)
     plt.clf()
@@ -47,12 +48,6 @@ def main():
     filenames = [
         'audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
-    # Store plotted audio waves in plots dir
-    try:
-        makedirs('plots')
-    except OSError as err:
-        pass
-
     # Ellie recordings
     ellie_recordings = [wave.open(filename, 'r') for filename in filenames]
 
@@ -62,40 +57,26 @@ def main():
         # Open file
         file = wave.open(filename, 'r')
 
-        # Find number of samples of audio file
+        # Get audio data
         total_samples = wave.Wave_read.getnframes(file)
-
-        # Find sample rate of audio file
         sample_rate = wave.Wave_read.getframerate(file)
 
         # Get the signal from file
         filename = filename.rsplit(".", 1)[0]
         signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
+        plot_audio_signal("Original audio signal", signal)
 
-        # Plot the audio file
-        plt.plot(signal)
-        title = filename + ' before changing frequencies'
-        plt.title(title)
-        plt.xlabel('Time')
-        plt.ylabel('Amplitude')
+        # ##### Parameters for windowed fft ########
+        secs_in_window = 1 / 10
+        secs_in_increment = 1 / 200
+        averaged_number_of_freqs = 20
+        bool_plot_audio_signal_pre_fft = False
+        bool_plot_frequencies = False
+        bool_plot_average_freqs = False
+        # ##########################################
 
-        try:
-            makedirs('plots/before')
-        except OSError as err:
-            pass
-
-        plt.savefig('plots/before/' + filename.split('/')[1])
-        plt.clf()
-
-        # Parameters for windowed fft
-        secs_in_window = 1 / 5
-        secs_in_increment = 1 / 100
         window = int(sample_rate * secs_in_window)
         increment = int(sample_rate * secs_in_increment)
-        averaged_number_of_freqs = 20
-        bool_plot_audio_signal_pre_fft = True
-        bool_plot_frequencies = True
-        bool_plot_average_freqs = True
 
         freqs = np.fft.rfftfreq(window, 1 / sample_rate)
 
@@ -128,7 +109,7 @@ def main():
                 plot_frequencies(title, freqs, fft_windowed_signal,
                                  'plots/frequencies/' + str(iteration_count))
 
-            if True: #iteration_count % averaged_number_of_freqs == 0:
+            if iteration_count % averaged_number_of_freqs == 0:
                 averages = []
                 for j in range(len(freqs)):
                     averages.append(np.average(last_freqs[j]))
@@ -142,48 +123,22 @@ def main():
             i += increment
             iteration_count += 1
 
-        exit()  # todo remove this, for debug
-        # Output of Fourier transform
-        fft_signal = np.ftt.rfft(signal)
+        audio_after_fft = []
+        for window in post_fft_frequencies:
+            window[(freqs > 1000)] = 0
+            audio_after_fft.append(np.fft.irfft(window))
+        audio_after_fft = np.concatenate(audio_after_fft)
+        audio_after_fft = audio_after_fft.astype(np.int32)
+        plot_audio_signal("Post-fft with windows", audio_after_fft)
+        saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
+        write(saved_name, sample_rate, audio_after_fft)
 
-        # x axis
-        freqs = np.ftt.rfftfreq(total_samples, 1 / sample_rate)
+        exit()  # todo remove this, for debug
 
         # Filter all frequencies above threshold
-        threshold = 300
-        fft_signal[(freqs > threshold)] = 0
+        # threshold = 300
+        # fft_signal[(freqs > threshold)] = 0
 
-        # Plot the fft output
-        plt.plot(fft_signal)
-        # plt.show()
-
-        # Revert back to original
-        audio_after_frequency_transform = np.ftt.irfft(fft_signal)
-
-        # Plot the audio file after transformation
-        plt.plot(audio_after_frequency_transform)
-        title = filename + ' after changing frequencies'
-        plt.title(title)
-        plt.xlabel('Time')
-        plt.ylabel('Amplitude')
-
-        # Create dir to save plots after transform
-        try:
-            makedirs('plots/after')
-        except OSError as err:
-            pass
-
-        plt.savefig('plots/after/' + filename.split('/')[1])
-        plt.clf()
-
-        # Save the audio file after transformation
-        try:
-            makedirs('audio_files/after')
-        except OSError as err:
-            pass
-
-        saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
-        write(saved_name, sample_rate, audio_after_frequency_transform)
 
 
 if __name__ == '__main__':
