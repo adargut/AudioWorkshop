@@ -26,11 +26,14 @@ def plot_audio_signal(title, signal):
     plt.show()
     plt.clf()
 
+
 def merge_windows(windows):
     return np.concatenate(windows)
 
+
 def main():
-    filenames = ['audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+    filenames = [
+        'audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Store plotted audio waves in plots dir
     try:
