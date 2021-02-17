@@ -14,7 +14,7 @@ def generate_sine_wave(freq, sample_rate, duration, amplitude):
 
 
 # Parameters for sine wave
-freq = 200
+freq = 800
 sample_rate = 48000
 amplitude = 20
 duration = 10
@@ -24,4 +24,5 @@ total_samples = sample_rate * duration
 sine_x, sine_y = generate_sine_wave(freq, sample_rate, duration, amplitude)
 
 # Save sine to .wav file
-wavfile.write('../audio_files/sine_experiment.wav', sample_rate, sine_y)
+
+wavfile.write('../audio_files/sine_experiment2.wav', sample_rate, sine_y)

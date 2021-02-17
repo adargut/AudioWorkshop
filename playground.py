@@ -19,8 +19,9 @@ def plot_frequencies(title, freqs, amplitudes, path=None):
     plt.xlabel('Freq [Hz]')
     plt.ylabel('Magnitude')
     plt.plot(freqs, amplitudes)
-    if path:
-        plt.savefig(path)
+    plt.show()
+    # if path:
+    #     plt.savefig(path)
     plt.clf()
 
 
@@ -32,7 +33,7 @@ def eliminate_frequencies(amplitudes, freqs, threshold):
 
 def plot_audio_signal(title, signal, path=None):
     plt.title(title)
-    plt.plot(signal)
+    plt.plot(signal[:1000])
     plt.xlabel('Time')
     plt.ylabel('Amplitude')
     plt.show()
@@ -47,7 +48,7 @@ def merge_windows(windows):
 
 def main():
     filenames = [
-        'audio_files/sine_experiment.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+        'audio_files/sine_experiment1.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Ellie recordings
     ellie_recordings = [wave.open(filename, 'r') for filename in filenames]
@@ -61,16 +62,33 @@ def main():
         # Get audio data
         total_samples = wave.Wave_read.getnframes(file)
         sample_rate = wave.Wave_read.getframerate(file)
+        def generate_sine_wave(freq, sample_rate, duration, amplitude):
+            x = np.linspace(0, duration, sample_rate * duration, endpoint=False)
+            frequencies = x * freq
+            # 2pi because np.sin takes radians, y_i = f(x_i) where f(x)=sin(2pi*x)
+            y = amplitude * np.sin((2 * np.pi) * frequencies)
+            return x, y
+
+        # Parameters for sine wave
+        freq = 800
+        sample_rate = 48000
+        amplitude = 20
+        duration = 3
+        total_samples = sample_rate * duration
+
+        # Generate the wave
+        sine_x, sine_y = generate_sine_wave(freq, sample_rate, duration, amplitude)
 
         # Get the signal from file
         filename = filename.rsplit(".", 1)[0]
-        signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
+        # signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
+        signal = sine_y
         plot_audio_signal("Original audio signal", signal)
 
         # ##### Parameters for windowed fft ########
-        secs_in_window = 1 / 5
+        secs_in_window = 1 / 50
         secs_in_increment = 1 / 100
-        averaged_number_of_freqs = 10
+        averaged_number_of_freqs = 2
 
         bool_plot_audio_signal_pre_fft = False
         bool_plot_frequencies = False
@@ -81,6 +99,7 @@ def main():
         increment = int(sample_rate * secs_in_increment)
 
         freqs = np.fft.rfftfreq(window, 1 / sample_rate)
+        freqs2 = np.fft.rfftfreq(increment, 1 / sample_rate)
 
         # Perform fft on small window
         last_freqs = [[] for _ in range(len(freqs))]
@@ -100,6 +119,7 @@ def main():
 
             # Use fft
             fft_windowed_signal = np.fft.rfft(windowed_signal)
+
             # fft_windowed_signal2 = np.abs(np.fft.rfft(windowed_signal2))
 
             # Update averages
@@ -112,10 +132,10 @@ def main():
                 plot_frequencies(title, freqs, fft_windowed_signal,
                                  'plots/frequencies/' + str(iteration_count))
 
-            averages = []
-            for j in range(len(freqs)):
-                averages.append(np.average(last_freqs[j]))
-            post_fft_frequencies.append(averages)
+            # averages = []
+            # for j in range(len(freqs)):
+            #     averages.append(np.average(last_freqs[j]))
+            post_fft_frequencies.append(fft_windowed_signal)
             if bool_plot_average_freqs:
                 title = 'Average Frequency Histogram in time ' + str((i + window) / sample_rate)
                 plot_frequencies(title, freqs, averages,
@@ -130,8 +150,19 @@ def main():
             for i in range(0, int(len(block) / int(window / increment)) - 1):
                 start = i * int(window / increment)
                 end = (i + 1) * int(window / increment)
-                new_block.append(np.average(block[start:end]))
+                new_block.append(sum(block[start:end]))
                 # new_block.append(block[i*int(window/increment)])
+            # log_scale = [0]*len(new_block)
+            # freq = 50
+            # i = 0
+            # while freqs[i] < freq:
+            #     i += i
+            # while i < len(freqs2):
+            #     sum2 += new_block[i]
+            #     if freqs2[i] > freq:
+            #         log_scale[i] = sum2
+            #         sum2 = 0
+            #         freq *= pow(2, 1/24)
             processed_signal = np.fft.irfft(new_block)
             audio_after_fft.append(processed_signal)
         audio_after_fft = np.concatenate(audio_after_fft)
@@ -139,6 +170,7 @@ def main():
         plot_audio_signal("Post-fft with windows", audio_after_fft)
         saved_name = 'audio_files/after/' + filename.split('/')[1] + '.wav'
         write(saved_name, sample_rate, audio_after_fft)
+        exit()
 
         # Filter all frequencies above threshold
         # threshold = 300
