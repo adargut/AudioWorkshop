@@ -33,7 +33,7 @@ def eliminate_frequencies(amplitudes, freqs, threshold):
 
 def plot_audio_signal(title, signal, path=None):
     plt.title(title)
-    plt.plot(signal[:1000])
+    plt.plot(signal)
     plt.xlabel('Time')
     plt.ylabel('Amplitude')
     plt.show()
@@ -42,13 +42,40 @@ def plot_audio_signal(title, signal, path=None):
     plt.clf()
 
 
-def merge_windows(windows):
-    return np.concatenate(windows)
+def plot_graph(freqs, post_fft_frequencies):
+    plt.title("Scatter Plot2")
+    thresh = 100000
+    x = []
+    y = []
+    z = []
 
+    for freq_id in range(len(freqs)):
+        for time_id in range(len(post_fft_frequencies)):
+            block = post_fft_frequencies[time_id]
+            amp = np.abs(block[freq_id])
+            if amp > thresh:
+                x.append(time_id)
+                y.append(freqs[freq_id])
+                z.append(np.log(amp))
+            # elif len(x) > 0:
+                # plt.scatter(x, y, c=z, cmap="plasma", s=0.1)
+                # x = []
+                # y = []
+                # z = []
+        # if len(x) > 0:
+            # plt.scatter(x, y, c=z, cmap="plasma", s=0.1)
+
+    plt.scatter(x, y, c=z, cmap='inferno', s=0.2)
+    plt.colorbar()
+
+    plt.xlabel('Time')
+    plt.ylabel('Frequency')
+    plt.show()
+    plt.clf()
 
 def main():
     filenames = [
-        'audio_files/sine_experiment1.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
+        'audio_files/ellie-with-noise.wav']  # ['audio_files/ellie-with-noise.wav', 'audio_files/background-noise.wav', 'audio_files/ellie.wav']
 
     # Ellie recordings
     ellie_recordings = [wave.open(filename, 'r') for filename in filenames]
@@ -60,8 +87,6 @@ def main():
         file = wave.open(filename, 'r')
 
         # Get audio data
-        total_samples = wave.Wave_read.getnframes(file)
-        sample_rate = wave.Wave_read.getframerate(file)
         def generate_sine_wave(freq, sample_rate, duration, amplitude):
             x = np.linspace(0, duration, sample_rate * duration, endpoint=False)
             frequencies = x * freq
@@ -70,19 +95,21 @@ def main():
             return x, y
 
         # Parameters for sine wave
-        freq = 800
-        sample_rate = 48000
-        amplitude = 20
-        duration = 3
-        total_samples = sample_rate * duration
-
-        # Generate the wave
-        sine_x, sine_y = generate_sine_wave(freq, sample_rate, duration, amplitude)
+        # freq = 800
+        # sample_rate = 48000
+        # amplitude = 20
+        # duration = 1
+        # total_samples = sample_rate * duration
+        #
+        # # Generate the wave
+        # sine_x, sine_y = generate_sine_wave(freq, sample_rate, duration, amplitude)
 
         # Get the signal from file
         filename = filename.rsplit(".", 1)[0]
-        # signal = np.frombuffer(recording.readframes(-1), dtype=np.int)
-        signal = sine_y
+        # signal = sine_y
+        signal = np.frombuffer(recording.readframes(-1), dtype=int)
+        total_samples = wave.Wave_read.getnframes(file)
+        sample_rate = wave.Wave_read.getframerate(file)
         plot_audio_signal("Original audio signal", signal)
 
         # ##### Parameters for windowed fft ########
@@ -107,7 +134,7 @@ def main():
         iteration_count = 0
         post_fft_frequencies = []
 
-        while i < (total_samples - window):
+        while i < (total_samples - window)/2:
             # Take a small window on audio file
             windowed_signal = signal[i:i + window]
 
@@ -143,6 +170,8 @@ def main():
 
             i += increment
             iteration_count += 1
+
+        plot_graph(freqs, post_fft_frequencies)
 
         audio_after_fft = []
         for block in post_fft_frequencies:
