@@ -18,6 +18,12 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+import threading
+import logging
+import signal
+import sys
+import time
+import tqdm
 
 # TODO: add bigger dataset
 # TODO: more algorithms like SVM, DNN etc. done
@@ -25,8 +31,11 @@ from sklearn.preprocessing import StandardScaler
 # TODO: play around with weights done
 # TODO: make a nice presentation in jupyter for muli
 # TODO: understand every feature used, and comment on it.
+# TODO save feature extraction to file
+# TODO make data processing multi threaded
 
-MAX_TONNETZ_WEIGHT = 450
+
+MAX_TONNETZ_WEIGHT = 800
 MAX_SPECTOGRAM_WEIGHT = 1000
 MAX_TEMPOGRAM_WEIGHT = 300
 MAX_CHROMA_WEIGHT = 400
@@ -34,25 +43,80 @@ MAX_MFCC_WEIGHT = 500  # most frequently used frequencies
 MAX_PITCH_WEIGHT = 500  # height of vocal tone
 MAX_SPEC_ROLLOF_WEIGHT = 5  # right skewedness of the waveform
 
+do_process = True
+
 
 class DatasetLoader:
-    def __init__(self):
+    def signal_handler(self, signal, frame):
+        global do_process
+        do_process = False
+        print('clicked ctrl+C')
+
+    def __init__(self, num_threads=5, max_files_to_process=15):
         self.X = []
         self.Y = []
+        self.threads = list()
+        self.file_paths_to_process = list()
+        self.num_threads = num_threads
+        self.lock = threading.Lock()
+        self.do_process = True
+        self.max_files_to_process = max_files_to_process
+        self.progress = None
 
     def load_dataset(self, path):
-        for file in tqdm.tqdm(os.listdir(path), desc='Extracing audio features from data'):
-            if os.path.isdir(path + '/' + file):
-                for audio_file in os.listdir(path + '/' + file):
-                    if file.startswith('Actor'):
-                        # print(file)
-                        self.process_audio_file(path + '/' + file, audio_file)
+        for dir in os.listdir(path):
+            processed_count = 0
+            if processed_count > self.max_files_to_process:
+                continue
+            if int(dir[2:]) > 10005:
+                return
+            if os.path.isdir(path + '/' + dir):
+                for inner_dir in os.listdir(path + '/' + dir):
+                    if processed_count > self.max_files_to_process:
+                        break
+                    for audio_file_to_process in os.listdir(path + '/' + dir + '/' + inner_dir):
+                        full_path = path + '/' + dir + '/' + inner_dir
+                        self.file_paths_to_process.append((full_path, audio_file_to_process,))
+                        processed_count += 1
+                        if processed_count > self.max_files_to_process:
+                            break
+
+    def process_dataset(self):
+        split = np.array_split(self.file_paths_to_process, self.num_threads)
+        signal.signal(signal.SIGINT, self.signal_handler)
+        self.progress = tqdm.tqdm(total=len(self.file_paths_to_process), desc='Extracting features from audio')
+
+        with self.progress:
+            for i in range(self.num_threads):
+                t = threading.Thread(target=self.process_audio_files_array, args=([split[i]]))
+                self.threads.append(t)
+                t.start()
+            for t in self.threads:
+                t.join()
+
+    def load_and_process_dataset(self, path):
+        self.load_dataset(path)
+        start = time.time()
+        self.process_dataset()
+        end = time.time()
+        print('finished processing dataset in {:.3f} ms'.format(end - start))
+        return self
+
+    def process_audio_files_array(self, arr):
+        for filepath, filename in arr:
+            self.process_audio_file(filepath, filename)
 
     def process_audio_file(self, filepath, filename: str):
-        label = int(filepath.split('/')[-1].split('_')[-1])
+        if not do_process:
+            return
+        # print('processing file', filepath + '/' + filename, 'from thread', threading.get_ident())
+        label = filepath.split('/')[-2]
         features = self.extract_features(filepath, filename)
+        self.lock.acquire()
         self.X.append(features)
         self.Y.append(label)
+        self.progress.update(1)
+        self.lock.release()
 
     def extract_features(self, filepath, filename):
         full_path = filepath + '/' + filename
@@ -62,12 +126,13 @@ class DatasetLoader:
         tonnetz = librosa.feature.tonnetz(y=samples, sr=sample_rate)
         chroma_stft = librosa.feature.chroma_stft(y=samples, sr=sample_rate)
         tempogram = librosa.feature.tempogram(y=samples, sr=sample_rate)
-        spectogram = librosa.feature.melspectrogram(samples, sample_rate, n_fft=100)
+        spectogram = librosa.feature.melspectrogram(samples, sample_rate)
         mfcc = librosa.feature.mfcc(y=samples, sr=sample_rate)
         spec_rolloff = librosa.feature.spectral_rolloff(y=samples, sr=sample_rate)
         pitches, magnitudes = librosa.piptrack(y=samples, sr=sample_rate)
         return np.concatenate([tonnetz.flatten()[:MAX_TONNETZ_WEIGHT], spectogram.flatten()[:MAX_SPECTOGRAM_WEIGHT],
-                               tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT], chroma_stft.flatten()[:MAX_CHROMA_WEIGHT],
+                               tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
+                               chroma_stft.flatten()[:MAX_CHROMA_WEIGHT],
                                mfcc.flatten()[:MAX_MFCC_WEIGHT], spec_rolloff.flatten()[:MAX_SPEC_ROLLOF_WEIGHT],
                                magnitudes.flatten()[:MAX_PITCH_WEIGHT]])
 
@@ -105,20 +170,20 @@ def get_classifier(classifier):
 
 
 def main():
-    train_path = 'data/train_new'
+    train_path = 'data/wav'
     parser = argparse.ArgumentParser()
     parser.add_argument('-c')
     args = parser.parse_args()
+    classifier = get_classifier(classifier=args.c)
     dataset_loader = DatasetLoader()
-    dataset_loader.load_dataset(train_path)
+    dataset_loader.load_and_process_dataset(train_path)
     assert len(dataset_loader.X) == len(dataset_loader.Y)
     # X, Y = shuffle(dataset_loader.X, dataset_loader.Y, random_state=42)
     X_train, X_test, y_train, y_test = train_test_split(
-        dataset_loader.X, dataset_loader.Y, test_size=0.33, random_state=42)
-    classifier = get_classifier(classifier=args.c)
+        dataset_loader.X, dataset_loader.Y, test_size=0.20, random_state=42)
     classifier.fit(X_train, y_train)
     acc = test_accuracy(X_test, y_test, classifier)
-    print('done with accuracy:', acc)
+    print('done with accuracy: {:.3f}'.format(acc))
 
 
 if __name__ == '__main__':
