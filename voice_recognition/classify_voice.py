@@ -22,6 +22,10 @@ import tqdm
 # TODO save feature extraction to file
 # TODO make data processing multi threaded
 
+# TODO: explain plots
+# TODO: improve accuracy
+# TODO: create test train deterministic to split equally
+
 
 MAX_TONNETZ_WEIGHT = 450
 MAX_SPECTOGRAM_WEIGHT = 1000
