@@ -38,7 +38,7 @@ MAX_PITCH_WEIGHT = 1000
 
 
 class DatasetLoader:
-    def __init__(self, num_threads=30, max_files_to_process_per_speaker=50, min_audio_file_duration=8,
+    def __init__(self, num_threads=30, max_files_to_process_per_speaker=2, min_audio_file_duration=8,
                  max_numbers_of_speakers=50):
         self.X = []
         self.Y = []
@@ -126,7 +126,9 @@ class DatasetLoader:
         # return preprocessing.normalize([concat])[0]
         # return preprocessing.normalize([mfcc.flatten()])
         # return mfcc.flatten()[:MAX_MFCC_WEIGHT]
-        return np.concatenate([mfcc.flatten()[:MAX_MFCC_WEIGHT], tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT], chroma_stft.flatten()[:MAX_CHROMA_WEIGHT]])
+        pad2d = lambda a, i: a[:, 0: i] if a.shape[1] > i else np.hstack((a, np.zeros((a.shape[0], i - a.shape[1]))))
+        return pad2d(mfcc, 40)
+        # return np.concatenate([mfcc.flatten()[:MAX_MFCC_WEIGHT], tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT], chroma_stft.flatten()[:MAX_CHROMA_WEIGHT]])
 
 
 def test_accuracy(X, Y, classifier: KNeighborsClassifier):
@@ -140,10 +142,10 @@ def test_accuracy(X, Y, classifier: KNeighborsClassifier):
     return 1 - (err / len(X))
 
 
-CLASSIFIERS = ['knn', 'linear_svm', 'poly_svm', 'rbf', 'dt', 'nn', 'bayes', 'ada', 'rf']
+CLASSIFIERS = ['knn', 'linear_svm', 'poly_svm', 'rbf', 'dt', 'nn', 'bayes', 'ada', 'rf', 'sknn']
 
 
-def get_classifier(classifier):
+def get_classifier(classifier, X_train):
     print('classifier:', classifier)
     if classifier == 'knn':
         return KNeighborsClassifier(n_neighbors=1)
@@ -163,6 +165,21 @@ def get_classifier(classifier):
         return AdaBoostClassifier()
     if classifier == 'rf':
         return RandomForestClassifier()
+    if classifier == 'sknn':
+        import tensorflow as tf
+        ip = tf.keras.layers.Input(shape=X_train[0].shape)
+        m = tf.keras.layers.Conv2D(256, kernel_size=(2,2),activation='relu')(ip)
+        m = tf.keras.layers.MaxPooling2D(pool_size=(2,2))(m)
+        m = tf.keras.layers.BatchNormalization()(m)
+        m = tf.keras.layers.Dropout(0.2)(m)
+        m = tf.keras.layers.Flatten()(m)
+        m = tf.keras.layers.Dense(64, activation='relu')(m)
+        op = tf.keras.layers.Dense(12, activation='softmax')(m)
+        model = tf.keras.Model(inputs=ip, outputs=op)
+        model.compile(loss=tf.keras.losses.categorical_crossentropy,
+                      optimizer='adam',
+                      metrics=['accuracy'])
+        return model
     raise Exception('No classifier found!!')
 
 
@@ -186,12 +203,27 @@ def main():
     #     dataset_loader.X, dataset_loader.Y, test_size=0.20, random_state=42)
     X_train, X_test, y_train, y_test = train_dataset_loader.X, test_dataset_loader.X, \
                                        train_dataset_loader.Y, test_dataset_loader.Y
-    X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
-    X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
+    # X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
+    # X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
     best_classifier, best_acc = None, 0
-    for classifier in CLASSIFIERS:
-        c = get_classifier(classifier)
-        c.fit(X_train, y_train)
+    for classifier in ['sknn']:#CLASSIFIERS:
+        X_train = np.array(X_train)
+        for i in range(len(y_train)):
+            y_train[i] = int(y_train[i][5:]) - 29
+        for i in range(len(y_test)):
+            y_test[i] = int(y_test[i][5:]) - 29
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
+        X_test = np.array(X_test)
+        train_X_ex = np.expand_dims(X_train, -1)
+        test_X_ex = np.expand_dims(X_test, -1)
+        c = get_classifier(classifier, train_X_ex)
+        from tensorflow.keras.utils import to_categorical
+        y_train = to_categorical(np.array(y_train))
+        X_train = np.stack([i.tolist() for i in X_train])
+        c.fit(train_X_ex, y_train, epochs=100,
+          batch_size=32,
+          validation_split=0.1)
         acc = test_accuracy(X_test, y_test, c)
         print('Accuracy achieved {:.3f}'.format(acc), 'with classifier {0}'.format(classifier))
         if acc > best_acc:
