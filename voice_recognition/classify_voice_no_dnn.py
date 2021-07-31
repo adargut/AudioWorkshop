@@ -28,17 +28,17 @@ from sklearn import preprocessing
 # TODO: create test train deterministic to split equally
 
 
-MAX_TONNETZ_WEIGHT = 500
-MAX_SPECTOGRAM_WEIGHT = 1
-MAX_TEMPOGRAM_WEIGHT = 1000
-MAX_CHROMA_WEIGHT = 1
-MAX_MFCC_WEIGHT = 2300
-MAX_PITCH_WEIGHT = 1000
+MAX_TONNETZ_WEIGHT = 450
+MAX_SPECTOGRAM_WEIGHT = 1000
+MAX_TEMPOGRAM_WEIGHT = 300
+MAX_CHROMA_WEIGHT = 400
+MAX_MFCC_WEIGHT = 500
+MAX_PITCH_WEIGHT = 2300
 
 
 class DatasetLoader:
-    def __init__(self, num_threads=30, max_files_to_process_per_speaker=200, min_audio_file_duration=8,
-                 max_numbers_of_speakers=50):
+    def __init__(self, num_threads=30, max_files_to_process_per_speaker=50, min_audio_file_duration=8,
+                 max_numbers_of_speakers=5):
         self.X = []
         self.Y = []
         self.threads = list()
@@ -55,8 +55,8 @@ class DatasetLoader:
             processed_count = 0
             if processed_count > self.max_files_to_process_per_speaker:
                 continue
-            # if int(dir[2:]) > 10000 + self.max_numbers_of_speakers:
-            #     return
+            if int(dir[2:]) > 10000 + self.max_numbers_of_speakers:
+                return
             if os.path.isdir(path + '/' + dir):
                 for inner_dir in os.listdir(path + '/' + dir):
                     if processed_count > self.max_files_to_process_per_speaker:
@@ -110,31 +110,27 @@ class DatasetLoader:
         full_path = filepath + '/' + filename
         if not os.path.isfile(full_path):
             raise Exception('invalid path: ' + full_path)
-        samples, sample_rate = librosa.load(full_path, sr=None, duration=8)
+        samples, sample_rate = librosa.load(full_path, offset=3, sr=None, duration=1)
+        # tonnetz = librosa.feature.tonnetz(y=samples, sr=sample_rate)
         # chroma_stft = librosa.feature.chroma_stft(y=samples, sr=sample_rate)
         # tempogram = librosa.feature.tempogram(y=samples, sr=sample_rate)
         # spectogram = librosa.feature.melspectrogram(samples, sample_rate)
-        # tonnetz = librosa.feature.tonnetz(y=samples, sr=sample_rate)
         mfcc = librosa.feature.mfcc(y=samples, sr=sample_rate)
         # pitches, magnitudes = librosa.piptrack(y=samples, sr=sample_rate)
-        # concat = np.concatenate([tonnetz.flatten()[:MAX_TONNETZ_WEIGHT], spectogram.flatten()[:MAX_SPECTOGRAM_WEIGHT],
+        # return np.concatenate([mfcc.flatten()[:MAX_MFCC_WEIGHT], tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
+        #                        chroma_stft.flatten()[:MAX_CHROMA_WEIGHT]])
+        # return np.concatenate([tonnetz.flatten()[:MAX_TONNETZ_WEIGHT], spectogram.flatten()[:MAX_SPECTOGRAM_WEIGHT],
         #                        tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
         #                        chroma_stft.flatten()[:MAX_CHROMA_WEIGHT],
         #                        mfcc.flatten()[:MAX_MFCC_WEIGHT], magnitudes.flatten()[:MAX_PITCH_WEIGHT]])
-        # return concat
-        # return preprocessing.normalize([concat])[0]
-        # return preprocessing.normalize([mfcc.flatten()])
         return mfcc.flatten()[:MAX_MFCC_WEIGHT]
-        # return np.concatenate([mfcc.flatten()[:MAX_MFCC_WEIGHT], tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT], chroma_stft.flatten()[:MAX_CHROMA_WEIGHT]])
-        # pad2d = lambda a, i: a[:, 0: i] if a.shape[1] > i else np.hstack((a, np.zeros((a.shape[0], i - a.shape[1]))))
-        # return pad2d(mfcc, 40)
 
 
 def test_accuracy(X, Y, classifier: KNeighborsClassifier):
     err = 0
     prediction = classifier.predict(X)
     for i in range(len(prediction)):
-        y, pred = Y[i], np.argmax(prediction[i])
+        y, pred = Y[i], prediction[i]
         print('model predicted:', pred, 'actual label:', y)
         if pred != y:
             err += 1
@@ -191,43 +187,26 @@ def main():
     # parser.add_argument('-c')
     # args = parser.parse_args()
     # classifier = get_classifier(classifier=args.c)
-    # dataset_loader = DatasetLoader()
-    # dataset_loader.load_and_process_dataset(train_path)
-    train_dataset_loader = DatasetLoader()
-    train_path = 'data/train'
-    train_dataset_loader.load_and_process_dataset(train_path)
-    test_dataset_loader = DatasetLoader()
-    test_path = 'data/test'
-    test_dataset_loader.load_and_process_dataset(test_path)
+    dataset_loader = DatasetLoader()
+    dataset_loader.load_and_process_dataset(train_path)
+    # train_dataset_loader = DatasetLoader()
+    # train_path = 'data/train'
+    # train_dataset_loader.load_and_process_dataset(train_path)
+    # test_dataset_loader = DatasetLoader()
+    # test_path = 'data/test'
+    # test_dataset_loader.load_and_process_dataset(test_path)
     # assert len(dataset_loader.X) == len(dataset_loader.Y)
     # X, Y = shuffle(dataset_loader.X, dataset_loader.Y, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        dataset_loader.X, dataset_loader.Y, test_size=0.20, random_state=42)
     # X_train, X_test, y_train, y_test = train_test_split(
-    #     dataset_loader.X, dataset_loader.Y, test_size=0.20, random_state=42)
-    X_train, X_test, y_train, y_test = train_dataset_loader.X, test_dataset_loader.X, \
-                                       train_dataset_loader.Y, test_dataset_loader.Y
+    #     train_dataset_loader.X, train_dataset_loader.Y, test_size=0.20, random_state=55)
 
-    # X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
-    # X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
+    X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
+    X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
     best_classifier, best_acc = None, 0
     for classifier in CLASSIFIERS:
-        # X_train = np.array(X_train)
-        # for i in range(len(y_train)):
-        #     y_train[i] = int(y_train[i][5:]) - 29
-        # for i in range(len(y_test)):
-        #     y_test[i] = int(y_test[i][5:]) - 29
-        # y_train = np.array(y_train)
-        # y_test = np.array(y_test)
-        # X_test = np.array(X_test)
-        # train_X_ex = np.expand_dims(X_train, -1)
-        # test_X_ex = np.expand_dims(X_test, -1)
         c = get_classifier(classifier, X_train)
-        # from tensorflow.keras.utils import to_categorical
-        # y_train = to_categorical(np.array(y_train))
-        # X_train = np.stack([i.tolist() for i in X_train])
-        # c.fit((X_train, y_train), epochs=50,
-        #       batch_size=32,
-        #       validation_data=[X_test, y_test])
-        # acc = test_accuracy(X_test, y_test, c)
         c.fit(X_train, y_train)
         acc = test_accuracy(X_test, y_test, c)
         print('Accuracy achieved {:.3f}'.format(acc), 'with classifier {0}'.format(classifier))
