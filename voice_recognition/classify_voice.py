@@ -206,20 +206,11 @@ def main():
     X_train, X_test, y_train, y_test = train_dataset_loader.X, test_dataset_loader.X, \
                                        train_dataset_loader.Y, test_dataset_loader.Y
 
-    # X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
-    # X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
+    X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
+    X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
     best_classifier, best_acc = None, 0
     for classifier in CLASSIFIERS:
-        # X_train = np.array(X_train)
-        # for i in range(len(y_train)):
-        #     y_train[i] = int(y_train[i][5:]) - 29
-        # for i in range(len(y_test)):
-        #     y_test[i] = int(y_test[i][5:]) - 29
-        # y_train = np.array(y_train)
-        # y_test = np.array(y_test)
-        # X_test = np.array(X_test)
-        # train_X_ex = np.expand_dims(X_train, -1)
-        # test_X_ex = np.expand_dims(X_test, -1)
+
         c = get_classifier(classifier, X_train)
         # from tensorflow.keras.utils import to_categorical
         # y_train = to_categorical(np.array(y_train))

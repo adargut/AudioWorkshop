@@ -14,31 +14,16 @@ import time
 import tqdm
 from sklearn import preprocessing
 
-# TODO: add bigger dataset
-# TODO: more algorithms like SVM, DNN etc. done
-# TODO: more features to account for done
-# TODO: play around with weights done
-# TODO: make a nice presentation in jupyter for muli
-# TODO: understand every feature used, and comment on it.
-# TODO save feature extraction to file
-# TODO make data processing multi threaded
-
-# TODO: explain plots
-# TODO: improve accuracy
-# TODO: create test train deterministic to split equally
-
-
-MAX_TONNETZ_WEIGHT = 450
-MAX_SPECTOGRAM_WEIGHT = 1000
+MAX_TONNETZ_WEIGHT = 50
+MAX_SPECTOGRAM_WEIGHT = 500
 MAX_TEMPOGRAM_WEIGHT = 300
-MAX_CHROMA_WEIGHT = 400
-MAX_MFCC_WEIGHT = 500
+MAX_CHROMA_WEIGHT = 100
+MAX_MFCC_WEIGHT = 800
 MAX_PITCH_WEIGHT = 2300
 
 
 class DatasetLoader:
-    def __init__(self, num_threads=30, max_files_to_process_per_speaker=50, min_audio_file_duration=8,
-                 max_numbers_of_speakers=5):
+    def __init__(self, num_threads=1, max_files_to_process_per_speaker=100, max_numbers_of_speakers=5):
         self.X = []
         self.Y = []
         self.threads = list()
@@ -47,7 +32,6 @@ class DatasetLoader:
         self.lock = threading.Lock()
         self.max_files_to_process_per_speaker = max_files_to_process_per_speaker
         self.progress = None
-        self.min_audio_file_duration = min_audio_file_duration
         self.max_numbers_of_speakers = max_numbers_of_speakers
 
     def load_dataset(self, path):
@@ -63,8 +47,6 @@ class DatasetLoader:
                         break
                     for audio_file_to_process in os.listdir(path + '/' + dir + '/' + inner_dir):
                         full_path = path + '/' + dir + '/' + inner_dir
-                        # if librosa.get_duration(librosa.load(full_path + '/' + audio_file_to_process, sr=None)[0]) < self.min_audio_file_duration:
-                        #     continue
                         if os.path.isfile(full_path + '/' + audio_file_to_process):
                             self.file_paths_to_process.append((full_path, audio_file_to_process,))
                             processed_count += 1
@@ -73,8 +55,8 @@ class DatasetLoader:
 
     def process_dataset(self):
         split = np.array_split(self.file_paths_to_process, self.num_threads)
-        print('processing dataset with {0} threads and {1} total audio files'.format(self.num_threads,
-                                                                                     len(self.file_paths_to_process)))
+        print('processing dataset with {0} threads and {1} total audio files'
+              .format(self.num_threads, len(self.file_paths_to_process)))
         self.progress = tqdm.tqdm(total=len(self.file_paths_to_process), desc='Extracting features from audio')
 
         with self.progress:
@@ -97,9 +79,16 @@ class DatasetLoader:
         for filepath, filename in arr:
             self.process_audio_file(filepath, filename)
 
+    class ExtractionError(Exception):
+        pass
+
     def process_audio_file(self, filepath, filename: str):
         label = filepath.split('/')[-2]
-        features = self.extract_features(filepath, filename)
+        try:
+            features = self.extract_features(filepath, filename)
+        except ExtractionError:
+            print(f'Could not extract features from {filepath}/{filename}')
+            return
         self.lock.acquire()
         self.X.append(features)
         self.Y.append(label)
@@ -109,21 +98,13 @@ class DatasetLoader:
     def extract_features(self, filepath, filename):
         full_path = filepath + '/' + filename
         if not os.path.isfile(full_path):
-            raise Exception('invalid path: ' + full_path)
-        samples, sample_rate = librosa.load(full_path, offset=3, sr=None, duration=1)
-        # tonnetz = librosa.feature.tonnetz(y=samples, sr=sample_rate)
-        # chroma_stft = librosa.feature.chroma_stft(y=samples, sr=sample_rate)
-        # tempogram = librosa.feature.tempogram(y=samples, sr=sample_rate)
-        # spectogram = librosa.feature.melspectrogram(samples, sample_rate)
+            raise ExtractionError
+        samples, sample_rate = librosa.load(full_path, offset=2, sr=None, duration=1)
+        tempogram = librosa.feature.tempogram(y=samples, sr=sample_rate)
         mfcc = librosa.feature.mfcc(y=samples, sr=sample_rate)
-        # pitches, magnitudes = librosa.piptrack(y=samples, sr=sample_rate)
-        # return np.concatenate([mfcc.flatten()[:MAX_MFCC_WEIGHT], tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
-        #                        chroma_stft.flatten()[:MAX_CHROMA_WEIGHT]])
-        # return np.concatenate([tonnetz.flatten()[:MAX_TONNETZ_WEIGHT], spectogram.flatten()[:MAX_SPECTOGRAM_WEIGHT],
-        #                        tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
-        #                        chroma_stft.flatten()[:MAX_CHROMA_WEIGHT],
-        #                        mfcc.flatten()[:MAX_MFCC_WEIGHT], magnitudes.flatten()[:MAX_PITCH_WEIGHT]])
-        return mfcc.flatten()[:MAX_MFCC_WEIGHT]
+        pitches, magnitudes = librosa.piptrack(y=samples, sr=sample_rate)
+        return np.concatenate([tempogram.flatten()[:MAX_TEMPOGRAM_WEIGHT],
+                               mfcc.flatten()[:MAX_MFCC_WEIGHT], magnitudes.flatten()[:MAX_PITCH_WEIGHT]])
 
 
 def test_accuracy(X, Y, classifier: KNeighborsClassifier):
@@ -131,20 +112,22 @@ def test_accuracy(X, Y, classifier: KNeighborsClassifier):
     prediction = classifier.predict(X)
     for i in range(len(prediction)):
         y, pred = Y[i], prediction[i]
-        print('model predicted:', pred, 'actual label:', y)
         if pred != y:
             err += 1
     return 1 - (err / len(X))
 
 
-CLASSIFIERS = ['knn', 'linear_svm', 'poly_svm', 'rbf', 'dt', 'nn', 'bayes', 'ada', 'rf']
+CLASSIFIERS = ['knn', 'svm', 'poly_svm', 'rbf', 'dt', 'nn', 'bayes', 'ada', 'rf']
+
+
+class ClassifierNotFoundException(Exception):
+    pass
 
 
 def get_classifier(classifier, X_train):
-    print('classifier:', classifier)
     if classifier == 'knn':
         return KNeighborsClassifier(n_neighbors=1)
-    if classifier == 'linear_svm':
+    if classifier == 'svm':
         return SVC(kernel='linear')
     if classifier == 'poly_svm':
         return SVC(kernel='poly')
@@ -160,58 +143,39 @@ def get_classifier(classifier, X_train):
         return AdaBoostClassifier()
     if classifier == 'rf':
         return RandomForestClassifier()
-    if classifier == 'sknn':
-        import tensorflow as tf
-        ip = tf.keras.layers.Input(shape=X_train[0].shape)
-        m = tf.keras.layers.Conv2D(512, kernel_size=(8, 8), activation='relu')(ip)
-        m = tf.keras.layers.MaxPooling2D(pool_size=(8, 8))(m)
-        m = tf.keras.layers.BatchNormalization()(m)
-        m = tf.keras.layers.Dropout(0.4)(m)
-        m = tf.keras.layers.Flatten()(m)
-        m = tf.keras.layers.Dense(64 * 4, activation='relu')(m)
-        m = tf.keras.layers.Dense(64 * 2, activation='relu')(m)
-        m = tf.keras.layers.Dense(64, activation='relu')(m)
-        m = tf.keras.layers.Dense(32, activation='relu')(m)
-        op = tf.keras.layers.Dense(12, activation='softmax')(m)
-        model = tf.keras.Model(inputs=ip, outputs=op)
-        model.compile(loss=tf.keras.losses.categorical_crossentropy,
-                      optimizer='adam',
-                      metrics=['accuracy'])
-        return model
-    raise Exception('No classifier found!!')
+    raise ClassifierNotFoundException
 
 
 def main():
     train_path = 'data/wav'
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('-c')
-    # args = parser.parse_args()
-    # classifier = get_classifier(classifier=args.c)
     dataset_loader = DatasetLoader()
     dataset_loader.load_and_process_dataset(train_path)
-    # train_dataset_loader = DatasetLoader()
-    # train_path = 'data/train'
-    # train_dataset_loader.load_and_process_dataset(train_path)
-    # test_dataset_loader = DatasetLoader()
-    # test_path = 'data/test'
-    # test_dataset_loader.load_and_process_dataset(test_path)
-    # assert len(dataset_loader.X) == len(dataset_loader.Y)
-    # X, Y = shuffle(dataset_loader.X, dataset_loader.Y, random_state=42)
     X_train, X_test, y_train, y_test = train_test_split(
         dataset_loader.X, dataset_loader.Y, test_size=0.20, random_state=42)
-    # X_train, X_test, y_train, y_test = train_test_split(
-    #     train_dataset_loader.X, train_dataset_loader.Y, test_size=0.20, random_state=55)
-
-    X_train = preprocessing.MinMaxScaler().fit_transform(X_train)
-    X_test = preprocessing.MinMaxScaler().fit_transform(X_test)
     best_classifier, best_acc = None, 0
+    accuracies = []
     for classifier in CLASSIFIERS:
-        c = get_classifier(classifier, X_train)
+        try:
+            c = get_classifier(classifier, X_train)
+        except ClassifierNotFoundException:
+            print(f'Invalid classifier given {classifier}')
+            return
         c.fit(X_train, y_train)
         acc = test_accuracy(X_test, y_test, c)
-        print('Accuracy achieved {:.3f}'.format(acc), 'with classifier {0}'.format(classifier))
+        accuracies.append(acc)
         if acc > best_acc:
             best_classifier, best_acc = c, acc
+        print(f'Achieved accuracy {round(acc, 3)} with {classifier}')
+
+        import matplotlib.pyplot as plt
+        fig = plt.figure()
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.bar(CLASSIFIERS, accuracies)
+        plt.title('Accuracy achieved by different classifiers')
+        plt.xlabel('Classifier Name')
+        plt.ylabel('Accuracy %')
+        plt.show()
+
     print('Best accuracy: {:.3f}'.format(best_acc), 'achieved by: {0}'.format(best_classifier))
 
 
