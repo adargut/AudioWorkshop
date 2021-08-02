@@ -85,21 +85,23 @@ class DatasetLoader:
     def process_audio_file(self, filepath, filename: str):
         label = filepath.split('/')[-2]
         try:
-            features = self.extract_features(filepath, filename)
+            duration = min(librosa.get_duration(librosa.load(filepath + '/' + filename, sr=None)[0]), 7)
+            for offset in range(round(duration)):
+                features = self.extract_features(filepath, filename, offset)
+                self.lock.acquire()
+                self.X.append(features)
+                self.Y.append(label)
+                self.progress.update(1)
+                self.lock.release()
         except ExtractionError:
             print(f'Could not extract features from {filepath}/{filename}')
             return
-        self.lock.acquire()
-        self.X.append(features)
-        self.Y.append(label)
-        self.progress.update(1)
-        self.lock.release()
 
-    def extract_features(self, filepath, filename):
+    def extract_features(self, filepath, filename, offset):
         full_path = filepath + '/' + filename
         if not os.path.isfile(full_path):
             raise ExtractionError
-        samples, sample_rate = librosa.load(full_path, offset=2, sr=None, duration=1)
+        samples, sample_rate = librosa.load(full_path, offset=offset, sr=None, duration=1)
         tempogram = librosa.feature.tempogram(y=samples, sr=sample_rate)
         mfcc = librosa.feature.mfcc(y=samples, sr=sample_rate)
         pitches, magnitudes = librosa.piptrack(y=samples, sr=sample_rate)
@@ -126,7 +128,7 @@ class ClassifierNotFoundException(Exception):
 
 def get_classifier(classifier, X_train):
     if classifier == 'knn':
-        return KNeighborsClassifier(n_neighbors=1)
+        return KNeighborsClassifier(n_neighbors=3)
     if classifier == 'svm':
         return SVC(kernel='linear')
     if classifier == 'poly_svm':
@@ -167,14 +169,14 @@ def main():
             best_classifier, best_acc = c, acc
         print(f'Achieved accuracy {round(acc, 3)} with {classifier}')
 
-        import matplotlib.pyplot as plt
-        fig = plt.figure()
-        ax = fig.add_axes([0, 0, 1, 1])
-        ax.bar(CLASSIFIERS, accuracies)
-        plt.title('Accuracy achieved by different classifiers')
-        plt.xlabel('Classifier Name')
-        plt.ylabel('Accuracy %')
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # fig = plt.figure()
+        # ax = fig.add_axes([0, 0, 1, 1])
+        # ax.bar(CLASSIFIERS, accuracies)
+        # plt.title('Accuracy achieved by different classifiers')
+        # plt.xlabel('Classifier Name')
+        # plt.ylabel('Accuracy %')
+        # plt.show()
 
     print('Best accuracy: {:.3f}'.format(best_acc), 'achieved by: {0}'.format(best_classifier))
 
